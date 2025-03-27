@@ -161,3 +161,9 @@ ssu_frame <- bg_tracts %>%
   select(Tract, BlockGroup, COMBINED_TRACT, BLOCK, 
          pop18_44, pop45_64, pop65plus, pop_total)
 ```
+
+# 3. Calculate the sampling rate
+
+```{r}
+
+```
