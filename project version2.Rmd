@@ -171,7 +171,7 @@ psu_frame <- bg_tracts %>%
   ) %>%
   ungroup()
 
-# 2I create the SSU frame
+# 2J create the SSU frame
 ssu_frame <- bg_tracts %>%
   mutate(BLOCK = ifelse(
     is.na(to), 
@@ -208,8 +208,8 @@ sr_65up = n_65up / sum(psu_frame$Age_65_up)
 # 3C Calculate the No of sampled PSU
 n_psu = 30
 
-# 3D Calcualte the PSU probability with composite MOS
-psu_frame <- psu_frame %>%
+# 3D Calculate the PSU probability with composite MOS
+psu_frame2 <- psu_frame %>%
   mutate(
     MOS_1844 = Age_18_44 * sr_1844,
     MOS_4564 = Age_45_64 * sr_4564,
@@ -223,21 +223,34 @@ psu_frame <- psu_frame %>%
   )
 
 # 3E merge the PSU probability with the SSU frame
-ssu_frame <- ssu_frame %>%
-  left_join(psu_frame %>% select(COMBINED_TRACT, PSU_MOS_composite, PSU_prob), 
+ssu_frame2 <- ssu_frame %>%
+  left_join(psu_frame2 %>% select(COMBINED_TRACT, PSU_MOS_composite, PSU_prob), 
             by = c("COMBINED_TRACT" = "COMBINED_TRACT"))
 
 # 3F Calculate the SSU probability
-ssu_frame <- ssu_frame %>%
+ssu_frame2 <- ssu_frame2 %>%
   mutate(
     MOS_1844 = pop18_44 * sr_1844,
     MOS_4564 = pop45_64 * sr_4564,
     MOS_65up = pop65plus * sr_65up
   ) %>% 
   mutate(
-    SSU_MOS_composite = (MOS_1844 + MOS_4564 + MOS_65up) / PSU_MOS_composite
+    SSU_MOS_composite = MOS_1844 + MOS_4564 + MOS_65up
   ) %>%
   mutate(
     SSU_prob = SSU_MOS_composite * 1 / PSU_MOS_composite
   )
+
+# 3G Calculate within SSU probability and size
+ssu_frame2 <- ssu_frame2 %>%
+  mutate(pp_1844 = sr_1844/PSU_prob/SSU_prob,
+         pp_4564 = sr_4564/PSU_prob/SSU_prob,
+         pp_65up = sr_65up/PSU_prob/SSU_prob) %>% 
+  mutate(size_1844 = pop18_44 * SSU_prob * pp_1844,
+         size_4564 = pop45_64 * SSU_prob * pp_4564,
+         size_65up = pop65plus * SSU_prob * pp_65up) %>%
+  mutate(size_total = size_1844 + size_4564 + size_65up)
+
+# 3H check if self-weighting
+
 ```
