@@ -148,7 +148,30 @@ psu_frame <- bg_tracts %>%
 # 2G Sanity check
 summary(psu_frame$n_BG)
 
-# 2H create the SSU frame
+# 2H there are two tracts that have very small 65+
+## they are also adjacent tracts
+## COMBINED_TRACT 24033801105 and 24033801106
+## Let's merge 24033801106 into 24033801105
+bg_tracts <- bg_tracts %>%
+  mutate(COMBINED_TRACT = ifelse(
+    COMBINED_TRACT == "24033801106", 
+    "24033801105", 
+    COMBINED_TRACT)
+)
+
+# 2I now we can create the new PSU frame
+psu_frame <- bg_tracts %>%
+  group_by(COMBINED_TRACT) %>%
+  summarise(
+    Age_18_44 = sum(pop18_44, na.rm = TRUE),
+    Age_45_64 = sum(pop45_64, na.rm = TRUE),
+    Age_65_up = sum(pop65plus, na.rm = TRUE),
+    Total     = sum(pop_total, na.rm = TRUE),
+    n_BG      = n()
+  ) %>%
+  ungroup()
+
+# 2I create the SSU frame
 ssu_frame <- bg_tracts %>%
   mutate(BLOCK = ifelse(
     is.na(to), 
@@ -158,12 +181,63 @@ ssu_frame <- bg_tracts %>%
   left_join((psu_frame %>% select(COMBINED_TRACT, n_BG)), 
              by = c("COMBINED_TRACT" = "COMBINED_TRACT")) %>%
   mutate(BLOCK = ifelse(is.na(BLOCK), n_BG, BLOCK)) %>%
+  mutate(BLOCK = ifelse(Tract == "24033801106", 
+    case_when(
+      BLOCK == 1 ~ 3,
+      BLOCK == 2 ~ 4,
+      BLOCK == 3 ~ 5
+    ), BLOCK)) %>% 
   select(Tract, BlockGroup, COMBINED_TRACT, BLOCK, 
          pop18_44, pop45_64, pop65plus, pop_total)
 ```
 
-# 3. Calculate the sampling rate
+# 3. Sampling Design
 
 ```{r}
+# 3A Calculate the required sample size
+n_1844 = ceiling(200/0.5)
+n_4564 = ceiling(200/0.6)
+n_65up = ceiling(200/0.65)
+n_total = n_1844 + n_4564 + n_65up
 
+# 3B Calculate the sampling rate for each domain
+sr_1844 = n_1844 / sum(psu_frame$Age_18_44)
+sr_4564 = n_4564 / sum(psu_frame$Age_45_64)
+sr_65up = n_65up / sum(psu_frame$Age_65_up)
+
+# 3C Calculate the No of sampled PSU
+n_psu = 30
+
+# 3D Calcualte the PSU probability with composite MOS
+psu_frame <- psu_frame %>%
+  mutate(
+    MOS_1844 = Age_18_44 * sr_1844,
+    MOS_4564 = Age_45_64 * sr_4564,
+    MOS_65up = Age_65_up * sr_65up
+  ) %>% 
+  mutate(
+    PSU_MOS_composite = MOS_1844 + MOS_4564 + MOS_65up
+  ) %>% 
+  mutate(
+    PSU_prob = PSU_MOS_composite * n_psu / n_total
+  )
+
+# 3E merge the PSU probability with the SSU frame
+ssu_frame <- ssu_frame %>%
+  left_join(psu_frame %>% select(COMBINED_TRACT, PSU_MOS_composite, PSU_prob), 
+            by = c("COMBINED_TRACT" = "COMBINED_TRACT"))
+
+# 3F Calculate the SSU probability
+ssu_frame <- ssu_frame %>%
+  mutate(
+    MOS_1844 = pop18_44 * sr_1844,
+    MOS_4564 = pop45_64 * sr_4564,
+    MOS_65up = pop65plus * sr_65up
+  ) %>% 
+  mutate(
+    SSU_MOS_composite = (MOS_1844 + MOS_4564 + MOS_65up) / PSU_MOS_composite
+  ) %>%
+  mutate(
+    SSU_prob = SSU_MOS_composite * 1 / PSU_MOS_composite
+  )
 ```
