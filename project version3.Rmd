@@ -125,13 +125,26 @@ bg_tracts <- bg_tracts %>%
     MOS_d3 = f3*pop65plus
   )
 
+# Check if MOS_d1 > pop18_44
+bg_tracts[bg_tracts$MOS_d1 > bg_tracts$pop18_44, "BlockGroup"] #none
+
+# Check if MOS_d2 > pop45_64
+bg_tracts[bg_tracts$MOS_d2 > bg_tracts$pop45_64, "BlockGroup"] #none
+
+# Check if MOS_d3 > pop65plus
+bg_tracts[bg_tracts$MOS_d3 > bg_tracts$pop65plus, "BlockGroup"] #none
 
 # 2B Compute MOS for Each SSU
 bg_tracts <- bg_tracts %>%
   mutate(
     MOS_bg = MOS_d1 + MOS_d2 + MOS_d3
   )
+
 head(bg_tracts[, c("BlockGroup","Tract","pop18_44","pop45_64","pop65plus", "MOS_d1", "MOS_d2", "MOS_d3", "MOS_bg")])
+
+# check if total MOS > Total population for each SSU
+
+bg_tracts[bg_tracts$MOS_bg > bg_tracts$pop_total, "BlockGroup"] #none
 
 # 2C Aggregate to Tract Level to Get PSU Frame
 psu_frame <- bg_tracts %>%
