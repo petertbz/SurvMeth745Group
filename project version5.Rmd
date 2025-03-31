@@ -1,0 +1,449 @@
+---
+title: "Sampling Report"
+author: "Wen Chen & Peter Tan"
+date: `r Sys.Date()`
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, cache=FALSE, 
+                      autodep=TRUE, cache.comments=FALSE,
+                      message=FALSE, warning=FALSE)
+```
+
+```{r load packages and data}
+library(readxl)
+library(sampling)
+library(dplyr)
+library(tidyr)
+library(sf)
+library(tigris)
+library(leaflet)
+library(ggplot2)
+library(pps)
+library(nngeo)
+
+tract <- read_excel("/Users/chenwen/Desktop/25Winter/survmeth745/project/tract.xlsx")
+blockgroup <- read_excel("/Users/chenwen/Desktop/25Winter/survmeth745/project/blockgroup.xlsx")
+```
+
+# 1. Data Preparation
+```{r}
+# 1A. Inspect the data (optional quick checks)
+head(tract)
+head(blockgroup)
+summary(tract$TotPerson)
+summary(blockgroup$TotPerson)
+
+# 1B. Compute age-group totals for each dataset (18–44, 45–64, 65+)
+tract <- tract %>%
+  mutate(
+    pop18_44 = (Male18to19Yrs + Male20Yrs + Male21Yrs + Male22to24Yrs +
+                Male25to29Yrs + Male30to34Yrs + Male35to39Yrs + Male40to44Yrs) +
+               (Female18to19Yrs + Female20Yrs + Female21Yrs + Female22to24Yrs +
+                Female25to29Yrs + Female30to34Yrs + Female35to39Yrs + Female40to44Yrs),
+    
+    pop45_64 = (Male45to49Yrs + Male50to54Yrs + Male55to59Yrs + Male60to61Yrs +
+                Male62to64Yrs) +
+               (Female45to49Yrs + Female50to54Yrs + Female55to59Yrs + Female60to61Yrs +
+                Female62to64Yrs),
+    
+    pop65plus = (Male65to66Yrs + Male67to69Yrs + Male70to74Yrs + Male75to79Yrs +
+                 Male80to84Yrs + MaleGE85Yrs) +
+                (Female65to66Yrs + Female67to69Yrs + Female70to74Yrs + Female75to79Yrs +
+                 Female80to84Yrs + FemaleGE85Yrs),
+    pop_total = pop18_44 + pop45_64 + pop65plus
+  )
+
+# Do similarly for blockgroup (optional; depends on your approach)
+blockgroup <- blockgroup %>%
+  mutate(
+    pop18_44 = (Male18to19Yrs + Male20Yrs + Male21Yrs + Male22to24Yrs +
+                Male25to29Yrs + Male30to34Yrs + Male35to39Yrs + Male40to44Yrs) +
+               (Female18to19Yrs + Female20Yrs + Female21Yrs + Female22to24Yrs +
+                Female25to29Yrs + Female30to34Yrs + Female35to39Yrs + Female40to44Yrs),
+    
+    pop45_64 = (Male45to49Yrs + Male50to54Yrs + Male55to59Yrs + Male60to61Yrs +
+                Male62to64Yrs) +
+               (Female45to49Yrs + Female50to54Yrs + Female55to59Yrs + Female60to61Yrs +
+                Female62to64Yrs),
+    
+    pop65plus = (Male65to66Yrs + Male67to69Yrs + Male70to74Yrs + Male75to79Yrs +
+                 Male80to84Yrs + MaleGE85Yrs) +
+                (Female65to66Yrs + Female67to69Yrs + Female70to74Yrs + Female75to79Yrs +
+                 Female80to84Yrs + FemaleGE85Yrs),
+    pop_total = pop18_44 + pop45_64 + pop65plus
+  )
+
+# 1C link blockgroup with tract
+blockgroup <- blockgroup %>%
+  mutate(Tract = substr(BlockGroup, 1, 11))  # e.g., 24033800103
+
+bg_tracts <- blockgroup %>%
+  semi_join(tract, by="Tract")
+names(bg_tracts)
+
+# 1D Count number of Block Groups per Tract
+bg_count_per_tract <- bg_tracts %>%
+  group_by(Tract) %>%
+  summarise(n_BG = n()) %>%
+  arrange(desc(n_BG))  # optional: show tracts with most BGs first
+
+head(bg_count_per_tract)
+table(bg_count_per_tract$n_BG) # there are 10 blockgroups with only 1 BG 
+```
+
+# 2. Combine Tracts with Only 1 BG
+```{r}
+# 2A Download census tract shapefiles for Prince George's County (MD)
+tract_shapes <- tracts(state = "MD", county = "Prince", year = 2020) %>%
+  st_transform("+proj=longlat +datum=WGS84") %>%
+  mutate(Tract = as.character(GEOID))  # match `bg_count_per_tract$Tract`
+
+# 2B Merge BG counts with shapefiles
+tract_shapes <- tract_shapes %>%
+  left_join(bg_count_per_tract, by = "Tract") %>%
+  mutate(
+    n_BG = ifelse(is.na(n_BG), 0, n_BG),
+    single_BG = (n_BG == 1)
+  )
+
+## plot the map and highlight the tracts with only one BG
+ggplot() +
+  geom_sf(data = tract_shapes, aes(fill = single_BG), color = "black") +
+  scale_fill_manual(values = c("grey", "red")) +
+  theme_minimal() +
+  theme(legend.position = "none")
+## there is no adjacent tracts with only one BG
+## so we can comfortably combine tracts with only one BG 
+## with adjacent tracts with more than one BG
+
+# 2C Separate tracts into those with only one BG and those with at least two
+single_bg_shapes <- tract_shapes %>% filter(single_BG)
+multi_bg_shapes  <- tract_shapes %>% filter(!single_BG)
+
+# 2D For each single-BG tract, find the nearest multi-BG tract (using spatial nearest neighbor)
+# nearest <- st_nearest_feature(single_bg_shapes, multi_bg_shapes)
+# combine_map <- data.frame(
+#   from = single_bg_shapes$Tract,
+#   to   = multi_bg_shapes$Tract[nearest]
+# )
+
+merged_pairs <- st_join(single_bg_shapes, multi_bg_shapes, join = st_nn,
+                        maxdist = Inf, k = 1, left = TRUE, suffix = c("_single", "_multi"))
+merged_pairs = merged_pairs %>%
+  select(Tract_single, Tract_multi) %>%
+  rename(from = Tract_single, to = Tract_multi)
+
+merged_pairs = data.frame(from = merged_pairs$from, to = merged_pairs$to)
+
+combine_map = merged_pairs
+
+tract_shapes %>% 
+  mutate(from = ifelse(Tract %in% combine_map$from, 1, 0),
+         to = ifelse(Tract %in% combine_map$to, 1, 0)) %>%
+  mutate(test = case_when(
+    from == 1 ~ "from",
+    to == 1 ~ "to",
+    TRUE ~ "none"
+  )) %>%
+ggplot() +
+  geom_sf(aes(fill = test), color = "black") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+tract_shapes %>% 
+  mutate(test = case_when(
+    Tract == "24033800106" ~ "from",
+    Tract == "24033800213" ~ "to",
+    TRUE ~ "none"
+  )) %>%
+ggplot() +
+  geom_sf(aes(fill = test), color = "black") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# 2E Update the BG data: if a tract has only one BG, assign it the ID of its nearest neighbor
+bg_tracts <- bg_tracts %>%
+  left_join(combine_map, by = c("Tract" = "from")) %>%
+  mutate(COMBINED_TRACT = ifelse(is.na(to), Tract, to))
+
+# 2F Create the PSU frame
+psu_frame <- bg_tracts %>%
+  group_by(COMBINED_TRACT) %>%
+  summarise(
+    Age_18_44 = sum(pop18_44, na.rm = TRUE),
+    Age_45_64 = sum(pop45_64, na.rm = TRUE),
+    Age_65_up = sum(pop65plus, na.rm = TRUE),
+    Total     = sum(pop_total, na.rm = TRUE),
+    n_BG      = n()
+  ) %>%
+  ungroup()
+
+# 2G Sanity check
+summary(psu_frame$n_BG)
+
+# 2H create SSU frame
+ssu_frame <- bg_tracts %>%
+  mutate(BLOCK = ifelse(
+    is.na(to), 
+    as.numeric(substr(BlockGroup, 12, 12)),
+    NA
+  )) %>% 
+  left_join((psu_frame %>% select(COMBINED_TRACT, n_BG)), 
+             by = c("COMBINED_TRACT" = "COMBINED_TRACT")) %>%
+  mutate(BLOCK = ifelse(is.na(BLOCK), n_BG, BLOCK)) %>%
+  select(Tract, BlockGroup, COMBINED_TRACT, BLOCK, 
+         pop18_44, pop45_64, pop65plus, pop_total)
+```
+
+# 3. Combine Tracts with undersized cases
+```{r}
+# 3A Calculate the required sample size
+n_1844 = ceiling(200/0.5)
+n_4564 = ceiling(200/0.6)
+n_65up = ceiling(200/0.65)
+# n_total = n_1844 + n_4564 + n_65up
+n_total = 1100
+
+# 3B Calculate the sampling rate for each domain
+sr_1844 = n_1844 / sum(psu_frame$Age_18_44)
+sr_4564 = n_4564 / sum(psu_frame$Age_45_64)
+sr_65up = n_65up / sum(psu_frame$Age_65_up)
+
+# 3C Calculate the No of sampled PSU
+n_psu = 30
+
+# 3D Calculate the workload
+q_bar <- n_total / 30
+# each SSU should have cases larger than q_bar, at least 35
+# for each domain, the cases should be larger than 14; 12; 11  
+
+check = ssu_frame %>% filter(Tract %in% c(24033801105, 24033801106))
+tract_shapes %>% 
+  mutate(small = ifelse(Tract %in% c(24033801105, 24033801106), 1, 0)) %>%
+ggplot() +
+  geom_sf(aes(fill = small), color = "black") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# 3E Combine the tract with small cases
+ssu_frame = ssu_frame %>%
+  mutate(COMBINED_BLOCK = BlockGroup) %>%
+  mutate(COMBINED_BLOCK = case_when(
+    BlockGroup == "240338001082" ~ "240338001083",
+    BlockGroup == "240338011051" ~ "240338011063",
+    BlockGroup == "240338011052" ~ "240338011062",
+    BlockGroup == "240338011061" ~ "240338011063",
+    TRUE ~ BlockGroup)
+  ) %>% 
+  mutate(COMBINED_TRACT = case_when(
+    BlockGroup == "240338001082" ~ "24033800108",
+    BlockGroup == "240338011051" ~ "24033801106",
+    BlockGroup == "240338011052" ~ "24033801106",
+    BlockGroup == "240338011061" ~ "24033801106",
+    TRUE ~ COMBINED_TRACT)
+  ) %>% 
+  select(Tract, BlockGroup, COMBINED_TRACT, COMBINED_BLOCK, 
+         pop18_44, pop45_64, pop65plus, pop_total)
+
+combinelist = ssu_frame %>% 
+  select(Tract, BlockGroup, COMBINED_TRACT, COMBINED_BLOCK)
+
+# 3F Update the PSU frame
+ssu_frame = ssu_frame %>%
+  select(COMBINED_TRACT, COMBINED_BLOCK, pop18_44, pop45_64, pop65plus, pop_total) %>%
+  group_by(COMBINED_TRACT, COMBINED_BLOCK) %>%
+  summarise(
+    pop18_44 = sum(pop18_44, na.rm = TRUE),
+    pop45_64 = sum(pop45_64, na.rm = TRUE),
+    pop65plus = sum(pop65plus, na.rm = TRUE),
+    pop_total = sum(pop_total, na.rm = TRUE)
+  )
+
+# 3G update the PSU frame
+psu_frame = ssu_frame %>% 
+  group_by(COMBINED_TRACT) %>%
+  summarise(
+    Age_18_44 = sum(pop18_44, na.rm = TRUE),
+    Age_45_64 = sum(pop45_64, na.rm = TRUE),
+    Age_65_up = sum(pop65plus, na.rm = TRUE),
+    Total     = sum(pop_total, na.rm = TRUE),
+    n_BG      = n()
+  ) %>%
+  ungroup()
+```
+
+# 4. Sampling Design
+
+```{r}
+# 4A Calculate the PSU probability with composite MOS
+psu_frame2 <- psu_frame %>%
+  mutate(
+    MOS_1844 = Age_18_44 * sr_1844,
+    MOS_4564 = Age_45_64 * sr_4564,
+    MOS_65up = Age_65_up * sr_65up
+  ) %>% 
+  mutate(
+    PSU_MOS_composite = MOS_1844 + MOS_4564 + MOS_65up
+  ) %>% 
+  mutate(
+    PSU_prob = PSU_MOS_composite * n_psu / n_total
+  )
+
+# 4B merge the PSU probability with the SSU frame
+ssu_frame2 <- ssu_frame %>%
+  left_join(psu_frame2 %>% select(COMBINED_TRACT, PSU_MOS_composite, PSU_prob), 
+            by = c("COMBINED_TRACT" = "COMBINED_TRACT"))
+
+# 4C equal workload within SSU
+ssu_frame2 <- ssu_frame2 %>%
+  mutate(
+    q_bar = n_total / n_psu
+  ) 
+
+# 4D Calculate the SSU probability
+ssu_frame2 <- ssu_frame2 %>%
+  mutate(
+    MOS_1844 = pop18_44 * sr_1844,
+    MOS_4564 = pop45_64 * sr_4564,
+    MOS_65up = pop65plus * sr_65up
+  ) %>% 
+  mutate(
+    SSU_MOS_composite = MOS_1844 + MOS_4564 + MOS_65up
+  ) %>%
+  mutate(
+    SSU_prob = SSU_MOS_composite * 1 / PSU_MOS_composite
+  )
+
+# 4G Calculate within SSU probability and size
+ssu_frame2 <- ssu_frame2 %>%
+  mutate(pp_1844 = q_bar * sr_1844 / SSU_MOS_composite,
+         pp_4564 = q_bar * sr_4564 / SSU_MOS_composite,
+         pp_65up = q_bar * sr_65up / SSU_MOS_composite) %>%
+  mutate(
+    n_1844 = pp_1844 * pop18_44,
+    n_4564 = pp_4564 * pop45_64,
+    n_65up = pp_65up * pop65plus
+  ) %>% 
+  mutate(
+    n_total = n_1844 + n_4564 + n_65up
+  ) %>% 
+  mutate(overall_1844 = PSU_prob * SSU_prob * pp_1844,
+         overall_4564 = PSU_prob * SSU_prob * pp_4564,
+         overall_65up = PSU_prob * SSU_prob * pp_65up)
+```
+
+# 5. systematic PPS sampling
+
+```{r}
+set.seed(-1234)
+# 5A select PSU
+psu_frame3 = psu_frame2 %>% arrange(COMBINED_TRACT)
+psu_frame3$cum_PSU_MOS = cumsum(psu_frame3$PSU_MOS_composite)
+psu_frame3$PSUid = 1:nrow(psu_frame3)
+
+PSUsample = ppss(psu_frame3$PSU_MOS_composite, 30)
+psu_frame4 = psu_frame3 %>% filter(PSUid %in% PSUsample)
+
+# 5B select SSU
+psu_frame4 = psu_frame4 %>% mutate(selected = 1)
+ssu_frame3 = ssu_frame2 %>% 
+  left_join(psu_frame4 %>% select(COMBINED_TRACT, selected), 
+            by = c("COMBINED_TRACT" = "COMBINED_TRACT")) %>%
+  filter(selected == 1) %>% 
+  select(-selected) %>% 
+  arrange(COMBINED_TRACT, COMBINED_BLOCK)
+tractid = ssu_frame3 %>% select(COMBINED_TRACT) %>% distinct()
+
+# assign ssu id within each psu first
+ssu_frame3 = ssu_frame3 %>% group_by(COMBINED_TRACT) %>% mutate(ssuid = 1:n())
+
+ssu_frame4 = data_frame()
+for (i in 1:nrow(tractid)) {
+  tract = tractid$COMBINED_TRACT[i]
+  temdf = ssu_frame3 %>% filter(COMBINED_TRACT == tract)
+  ssusample = ppss(temdf$SSU_MOS_composite, 1)
+  temdf = temdf %>% filter(ssuid %in% ssusample)
+  ssu_frame4 = rbind(ssu_frame4, temdf)
+}
+
+# 5C check size in each domain
+sum(ssu_frame4$n_total)
+sum(ssu_frame4$n_1844)
+sum(ssu_frame4$n_4564)
+sum(ssu_frame4$n_65up)
+
+# alternative way to do sampling
+# 5D select PSU
+set.seed(-1234)
+psu_frame5 = psu_frame3
+psu_frame5$pik_psu <- inclusionprobabilities(psu_frame5$PSU_MOS_composite, 30)
+
+# 5E Systematic PPS sampling for psu
+psu_sample_index <- UPsystematic(psu_frame5$pik_psu)
+psu_frame6 <- psu_frame5[psu_sample_index == 1, ]
+
+eligible_ssus <- ssu_frame2 %>%
+  filter(COMBINED_TRACT %in% psu_frame6$COMBINED_TRACT) %>%
+  arrange(COMBINED_TRACT, COMBINED_BLOCK)
+
+# Sample 1 SSU per PSU using systematic PPS
+ssu_sample <- eligible_ssus %>%
+  group_by(COMBINED_TRACT) %>%
+  mutate(
+    pik_ssu = inclusionprobabilities(SSU_MOS_composite, 1),
+    sel = UPsystematic(pik_ssu)
+  ) %>%
+  filter(sel == 1) %>%
+  ungroup()
+
+sum(ssu_sample$n_total)
+sum(ssu_sample$n_1844)
+sum(ssu_sample$n_4564)
+sum(ssu_sample$n_65up)
+```
+# 6. Weighting calculation
+```{r}
+# Create base weights for each domain
+ssu_sample <- ssu_sample %>%
+  mutate(
+    weight_1844 = 1 / overall_1844,
+    weight_4564 = 1 / overall_4564,
+    weight_65up = 1 / overall_65up
+  )  
+
+```
+
+# Maps: Selected tracts and block groups 
+```{r}
+# A Selected tracts
+selected_tracts <- unique(ssu_sample$COMBINED_TRACT)
+
+tract_shapes %>%
+  mutate(selected = ifelse(Tract %in% selected_tracts, "Selected", "Not Selected")) %>%
+  ggplot() +
+  geom_sf(aes(fill = selected), color = "black") +
+  scale_fill_manual(values = c("Selected" = "red", "Not Selected" = "lightgray")) +
+  labs(title = "Selected Census Tracts (PSUs)",
+       fill = "Tract Selection") +
+  theme_minimal()
+
+# B Selected block groups
+# Get 2020 Block Group shapefiles
+blockgroup_shapes <- block_groups(state = "MD", county = "Prince George's", year = 2020) %>%
+  st_transform(4326)
+
+selected_blocks <- unique(ssu_sample$COMBINED_BLOCK)
+
+# Create map
+blockgroup_shapes %>%
+  mutate(selected = ifelse(GEOID %in% selected_blocks, "Selected", "Not Selected")) %>%
+  ggplot() +
+  geom_sf(aes(fill = selected), color = "black", linewidth = 0.3) +
+  scale_fill_manual(values = c("Selected" = "blue", "Not Selected" = "lightgray")) +
+  labs(title = "Selected Block Groups (SSUs)", fill = "Selection Status") +
+  theme_minimal()
+```
+
+
