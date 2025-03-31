@@ -402,4 +402,34 @@ sum(ssu_sample$n_total)
 sum(ssu_sample$n_1844)
 sum(ssu_sample$n_4564)
 sum(ssu_sample$n_65up)
+
+save(psu_frame4, ssu_frame4, combinelist, file = "sample.RData")
+```
+
+```{r}
+# overall block
+block_shapes <- block_groups(state = "MD", county = "Prince", year = 2020) %>%
+  st_transform("+proj=longlat +datum=WGS84")
+ggplot() +
+  geom_sf(data = tract_shapes, fill = NA, color = "black", size=1) +
+  geom_sf(data = block_shapes, fill = NA, linetype="dotted") +
+  theme_bw()
+ggsave("block_map.png", width = 5, height = 5, units = "in", dpi = 300)
+
+# combine single block tract
+tract_shapes %>% 
+  mutate(from = ifelse(Tract %in% combine_map$from, 1, 0),
+         to = ifelse(Tract %in% combine_map$to, 1, 0)) %>%
+  mutate(test = case_when(
+    from == 1 ~ "Single-block tract",
+    to == 1 ~ "Combined tract",
+    TRUE ~ "Other tract"
+  )) %>%
+  ggplot() +
+  geom_sf(aes(fill = test), color = "black") +
+  scale_fill_manual(name = "", 
+                    breaks = c("Single-block tract", "Combined tract", "Other tract"),
+                    values = c("blue", "red", "grey")) +
+  theme_bw()
+ggsave("combine_map.png", width = 5, height = 5, units = "in", dpi = 300)
 ```
