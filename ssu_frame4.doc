@@ -1,0 +1,26 @@
+
+<table style="text-align:center"><tr><td colspan="6" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Statistic</td><td>Mean</td><td>St. Dev.</td><td>Min</td><td>Median</td><td>Max</td></tr>
+<tr><td colspan="6" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">pop18_44</td><td>836.8</td><td>403.0</td><td>299</td><td>798.5</td><td>1,867</td></tr>
+<tr><td style="text-align:left">pop45_64</td><td>568.2</td><td>269.9</td><td>208</td><td>468.5</td><td>1,268</td></tr>
+<tr><td style="text-align:left">pop65plus</td><td>356.6</td><td>338.9</td><td>49</td><td>263.5</td><td>1,932</td></tr>
+<tr><td style="text-align:left">pop_total</td><td>1,761.6</td><td>749.5</td><td>761</td><td>1,552</td><td>3,405</td></tr>
+<tr><td style="text-align:left">PSU_MOS_composite</td><td>6.4</td><td>4.0</td><td>2.3</td><td>5.4</td><td>24.2</td></tr>
+<tr><td style="text-align:left">PSU_prob</td><td>0.2</td><td>0.1</td><td>0.1</td><td>0.1</td><td>0.7</td></tr>
+<tr><td style="text-align:left">q_bar</td><td>36.7</td><td>0.0</td><td>36.7</td><td>36.7</td><td>36.7</td></tr>
+<tr><td style="text-align:left">MOS_1844</td><td>0.9</td><td>0.4</td><td>0.3</td><td>0.8</td><td>2.0</td></tr>
+<tr><td style="text-align:left">MOS_4564</td><td>0.8</td><td>0.4</td><td>0.3</td><td>0.6</td><td>1.7</td></tr>
+<tr><td style="text-align:left">MOS_65up</td><td>0.8</td><td>0.8</td><td>0.1</td><td>0.6</td><td>4.5</td></tr>
+<tr><td style="text-align:left">SSU_MOS_composite</td><td>2.5</td><td>1.2</td><td>1.1</td><td>2.1</td><td>6.2</td></tr>
+<tr><td style="text-align:left">SSU_prob</td><td>0.4</td><td>0.2</td><td>0.1</td><td>0.4</td><td>0.8</td></tr>
+<tr><td style="text-align:left">pp_1844</td><td>0.02</td><td>0.01</td><td>0.01</td><td>0.02</td><td>0.04</td></tr>
+<tr><td style="text-align:left">pp_4564</td><td>0.02</td><td>0.01</td><td>0.01</td><td>0.02</td><td>0.05</td></tr>
+<tr><td style="text-align:left">pp_65up</td><td>0.04</td><td>0.02</td><td>0.01</td><td>0.04</td><td>0.1</td></tr>
+<tr><td style="text-align:left">n_1844</td><td>13.5</td><td>4.4</td><td>5.7</td><td>12.6</td><td>25.0</td></tr>
+<tr><td style="text-align:left">n_4564</td><td>11.6</td><td>2.5</td><td>4.5</td><td>11.6</td><td>16.8</td></tr>
+<tr><td style="text-align:left">n_65up</td><td>11.6</td><td>4.9</td><td>2.8</td><td>10.9</td><td>26.5</td></tr>
+<tr><td style="text-align:left">n_total</td><td>36.7</td><td>0.0</td><td>36.7</td><td>36.7</td><td>36.7</td></tr>
+<tr><td style="text-align:left">overall_1844</td><td>0.001</td><td>0.0</td><td>0.001</td><td>0.001</td><td>0.001</td></tr>
+<tr><td style="text-align:left">overall_4564</td><td>0.001</td><td>0.0</td><td>0.001</td><td>0.001</td><td>0.001</td></tr>
+<tr><td style="text-align:left">overall_65up</td><td>0.002</td><td>0.0</td><td>0.002</td><td>0.002</td><td>0.002</td></tr>
+<tr><td style="text-align:left">ssuid</td><td>1.7</td><td>0.7</td><td>1</td><td>2</td><td>3</td></tr>
+<tr><td colspan="6" style="border-bottom: 1px solid black"></td></tr></table>

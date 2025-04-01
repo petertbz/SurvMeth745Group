@@ -432,4 +432,79 @@ tract_shapes %>%
                     values = c("blue", "red", "grey")) +
   theme_bw()
 ggsave("combine_map.png", width = 5, height = 5, units = "in", dpi = 300)
+
+# combined block
+block_groups(state = "MD", county = "Prince", year = 2020) %>%
+  st_transform("+proj=longlat +datum=WGS84") %>%
+  # Create a new variable that identifies the merge groups
+  mutate(merge_group = case_when(
+    GEOID %in% c("240338001082", "240338001083") ~ "Group A: 240338001082-083",
+    GEOID %in% c("240338011051", "240338011061", "240338011063") ~ "Group B: 240338011051/061->063",
+    GEOID %in% c("240338011052", "240338011062") ~ "Group C: 240338011052->062",
+    TRUE ~ "Not merged"
+  )) %>% 
+ggplot() +
+  geom_sf(aes(fill = merge_group), color = "black") +
+  scale_fill_manual(name = "",
+                    breaks = c("Group A: 240338001082-083", 
+                               "Group B: 240338011051/061->063",
+                               "Group C: 240338011052->062",
+                               "Not merged"),
+                    values = c("Group A: 240338001082-083" = "blue",
+                               "Group B: 240338011051/061->063" = "red",
+                               "Group C: 240338011052->062" = "purple",
+                               "Not merged" = "grey")) +
+  theme_bw()
+ggsave("merged_block_map.png", width = 5, height = 5, units = "in", dpi = 300)
+
+# selcted tracts abd block groups on the same map
+psuidlsit = psu_frame4 %>% select(COMBINED_TRACT) %>% 
+  mutate(selectedpsu = 1)
+block_shapes = block_shapes %>% 
+  mutate(Tract = substr(GEOID, 1, 11)) %>%
+  left_join(psuidlsit, by = c("Tract" = "COMBINED_TRACT")) %>%
+  mutate(selectedpsu = ifelse(is.na(selectedpsu), 0, 1)) %>% 
+  mutate(selectedpsu = ifelse(GEOID == "240338018011", 1, selectedpsu)) %>% 
+  mutate(selectedssu = ifelse(GEOID %in% ssu_frame4$COMBINED_BLOCK, 1, 0)) %>% 
+  mutate(selectedpsu = ifelse(selectedssu == 1, 2, selectedpsu)) %>% 
+  mutate(selectedpsu = case_when(
+    selectedpsu == 0 ~ "Not selected",
+    selectedpsu == 1 ~ "Unselected block within selected tract",
+    selectedpsu == 2 ~ "Selected block"
+  ))
+ggplot() +
+  geom_sf(data = block_shapes, aes(fill = factor(selectedpsu)), color = "black") +
+  scale_fill_manual(name = "", 
+                    breaks = c("Not selected", "Unselected block within selected tract", "Selected block"),
+                    values = c("grey", "blue", "red")) +
+  theme_bw()
+ggsave("selected_map.png", width = 5, height = 5, units = "in", dpi = 300)
+```
+
+```{r}
+# descriptive statistics for PSU and SSU
+library(stargazer)
+psu_frame %>% as.data.frame() %>% 
+  stargazer(., header = FALSE, type = "html", digits = 1,
+            summary.stat = c("mean", "sd", "min", "median", "max"),
+            out = "psu_frame.doc")
+ssu_frame %>% as.data.frame() %>% 
+  stargazer(., header = FALSE, type = "html", digits = 1,
+            summary.stat = c("mean", "sd", "min", "median", "max"),
+            out = "ssu_frame.doc")
+
+# selected units
+ssu_frame4 %>% select(COMBINED_TRACT, COMBINED_BLOCK, 
+                      pop18_44, pop45_64, pop65plus, n_total, n_1844, n_4564, n_65up) %>% 
+  mutate(n_1844 = round(n_1844, 0),
+         n_4564 = round(n_4564, 0),
+         n_65up = round(n_65up, 0)) %>%
+  mutate(n_total = n_1844 + n_4564 + n_65up) %>%
+  write.csv("psu_frame4.csv", row.names = FALSE)
+
+# selected units
+ssu_frame4 %>% as.data.frame() %>% 
+  stargazer(., header = FALSE, type = "html", digits = 1,
+            summary.stat = c("mean", "sd", "min", "median", "max"),
+            out = "ssu_frame4.doc")
 ```
